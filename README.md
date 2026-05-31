@@ -8,7 +8,7 @@ A cool, and visually stunning CLI server browser and launcher for SA-MP and open
 * **Headless Dependency Management:** Automatically downloads, verifies, and extracts specific SA-MP versions and the `omp-client.dll` strictly when needed. 
 * **Security:** Encrypts saved Server Passwords and RCON passwords locally using AES-GCM.
 * **Linux/Wine Support:** wraps the native Windows injector in Wine.
-* **Legacy Import:** Automatically imports your SA-MP favorites from `USERDATA.DAT`.
+* **Legacy Import:** Automatically imports your SA-MP favourites from `USERDATA.DAT`.
 
 ## Installation
 
@@ -35,4 +35,3 @@ go build -o omp-cli ./cmd/omp-cli
 * `omp-cli query <ip:port>` - Perform a quick CLI query for a server.
 * `omp-cli launch --ip <ip> --port <port> --path <gta_path>` - Headless launch.
 * `omp-cli config view` - View current configuration.
-```
