@@ -26,7 +26,7 @@ type OpenMpServer struct {
 	Pm  uint32 `json:"pm"`  // Max Players
 	Gm  string `json:"gm"`  // Gamemode
 	La  string `json:"la"`  // Language
-	Pa  bool   `json:"pa"`  // Password Protected Status (Fixes the undefined error)
+	Pa  bool   `json:"pa"`  // Password Protected Status
 	Omp bool   `json:"omp"` // Is open.mp
 }
 

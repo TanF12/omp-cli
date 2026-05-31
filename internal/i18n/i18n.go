@@ -21,11 +21,11 @@ var translations = map[Lang]map[string]string{
 	},
 	PT: {
 		"usage":       "Uso: omp-cli <comando> [args]\nComandos: query, launch, config",
-		"launching":   "Iniciando open.mp via core...",
+		"launching":   "Iniciando open.mp...",
 		"success":     "Jogo iniciado com sucesso!",
 		"err_conn":    "Servidor inalcançável ou offline.",
 		"cfg_saved":   "Configuração salva com sucesso.",
-		"cfg_req_inj": "O caminho do injetor não está configurado. Execute: omp-cli config set-injector <caminho>",
+		"cfg_req_inj": "O caminho do injetor não está configurado. Use: omp-cli config set-injector <caminho>",
 		"cfg_current": "Configuração atual:",
 	},
 }

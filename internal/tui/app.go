@@ -219,7 +219,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.favsData.Servers[val] = config.FavoriteServer{}
 					config.SaveFavorites(m.favsData)
-					m.statusMsg = "Added " + val + " to Favorites."
+					m.statusMsg = "Added " + val + " to Favourites."
 					m.activeTab = TabFavorites
 
 				} else if m.inputMode == InputServerPassword || m.inputMode == InputServerPasswordAndLaunch {
@@ -319,10 +319,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if _, exists := m.favsData.Servers[target]; exists {
 					delete(m.favsData.Servers, target)
 					config.SaveFavorites(m.favsData)
-					m.statusMsg = "Removed from Favorites."
+					m.statusMsg = "Removed from Favourites."
 					m.applyFiltersAndSort()
 				} else {
-					m.statusMsg = "Server is not in favorites."
+					m.statusMsg = "Server is not in favourites."
 				}
 			}
 		case "v":
@@ -374,10 +374,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				target := m.viewList[m.cursor].IP
 				if _, exists := m.favsData.Servers[target]; exists {
 					delete(m.favsData.Servers, target)
-					m.statusMsg = "Removed from Favorites."
+					m.statusMsg = "Removed from Favourites."
 				} else {
 					m.favsData.Servers[target] = config.FavoriteServer{}
-					m.statusMsg = "Added to Favorites."
+					m.statusMsg = "Added to Favourites."
 				}
 				config.SaveFavorites(m.favsData)
 				m.applyFiltersAndSort()
@@ -468,7 +468,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	if m.width == 0 {
-		return "Initializing..."
+		return "Initialising..."
 	}
 
 	leftWidth := m.width/2 - 2
@@ -480,12 +480,12 @@ func (m model) View() string {
 	activeTabStyle := tabStyle.Background(lipgloss.Color("63")).Foreground(lipgloss.Color("255")).Bold(true)
 	inactiveTabStyle := tabStyle.Foreground(lipgloss.Color("241"))
 
-	favTab := inactiveTabStyle.Render("Favorites")
+	favTab := inactiveTabStyle.Render("Favourites")
 	globTab := inactiveTabStyle.Render("Global Servers")
 	if m.activeTab == TabGlobal {
 		globTab = activeTabStyle.Render("Global Servers")
 	} else {
-		favTab = activeTabStyle.Render("Favorites")
+		favTab = activeTabStyle.Render("Favourites")
 	}
 	tabs := lipgloss.JoinHorizontal(lipgloss.Top, favTab, "  ", globTab)
 	sortStr := "Players"

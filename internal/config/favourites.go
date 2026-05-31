@@ -27,7 +27,7 @@ func getFavoritesPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(configDir, "omp-cli", "favorites.json"), nil
+	return filepath.Join(configDir, "omp-cli", "favourites.json"), nil
 }
 
 func LoadFavorites() (*FavoritesData, error) {
