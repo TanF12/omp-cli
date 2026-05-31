@@ -32,7 +32,7 @@ type TabMode int
 
 const (
 	TabGlobal TabMode = iota
-	TabFavorites
+	TabFavourites
 )
 
 type InputMode int
@@ -50,7 +50,7 @@ const (
 type model struct {
 	cfg         *config.AppConfig
 	apiServers  []core.OpenMpServer
-	favsData    *config.FavoritesData
+	favsData    *config.FavouritesData
 	viewList    []core.OpenMpServer
 	liveData    map[string]core.ServerInfo
 	pingHistory map[string][]float64
@@ -77,7 +77,7 @@ func InitialModel(cfg *config.AppConfig, servers []core.OpenMpServer, launcher f
 	ti.CharLimit = 50
 	ti.Width = 40
 
-	favs, _ := config.LoadFavorites()
+	favs, _ := config.LoadFavourites()
 
 	m := model{
 		cfg:         cfg,
@@ -87,7 +87,7 @@ func InitialModel(cfg *config.AppConfig, servers []core.OpenMpServer, launcher f
 		pingHistory: make(map[string][]float64),
 		textInput:   ti,
 		sortMode:    SortPlayersDesc,
-		activeTab:   TabFavorites,
+		activeTab:   TabFavourites,
 		selectedVer: cfg.DefaultVersion,
 		isQuerying:  false,
 		launchCb:    launcher,
@@ -217,10 +217,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if !strings.Contains(val, ":") {
 						val += ":7777"
 					}
-					m.favsData.Servers[val] = config.FavoriteServer{}
-					config.SaveFavorites(m.favsData)
+					m.favsData.Servers[val] = config.Favouriteserver{}
+					config.SaveFavourites(m.favsData)
 					m.statusMsg = "Added " + val + " to Favourites."
-					m.activeTab = TabFavorites
+					m.activeTab = TabFavourites
 
 				} else if m.inputMode == InputServerPassword || m.inputMode == InputServerPasswordAndLaunch {
 					if len(m.viewList) > 0 {
@@ -229,7 +229,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						fav := m.favsData.Servers[target]
 						fav.ServerPassword = enc
 						m.favsData.Servers[target] = fav
-						config.SaveFavorites(m.favsData)
+						config.SaveFavourites(m.favsData)
 						m.statusMsg = "Server password securely saved."
 
 						if m.inputMode == InputServerPasswordAndLaunch {
@@ -253,7 +253,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					fav := m.favsData.Servers[target]
 					fav.RconPassword = enc
 					m.favsData.Servers[target] = fav
-					config.SaveFavorites(m.favsData)
+					config.SaveFavourites(m.favsData)
 					m.statusMsg = "RCON Password securely encrypted and saved."
 
 				} else if m.inputMode == InputNickname && val != "" {
@@ -297,7 +297,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "tab", "right", "left":
 			if m.activeTab == TabGlobal {
-				m.activeTab = TabFavorites
+				m.activeTab = TabFavourites
 			} else {
 				m.activeTab = TabGlobal
 			}
@@ -318,7 +318,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				target := m.viewList[m.cursor].IP
 				if _, exists := m.favsData.Servers[target]; exists {
 					delete(m.favsData.Servers, target)
-					config.SaveFavorites(m.favsData)
+					config.SaveFavourites(m.favsData)
 					m.statusMsg = "Removed from Favourites."
 					m.applyFiltersAndSort()
 				} else {
@@ -344,7 +344,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cfg.DefaultVersion = m.selectedVer
 			config.Save(m.cfg)
 		case "p":
-			if m.activeTab == TabFavorites && len(m.viewList) > 0 {
+			if m.activeTab == TabFavourites && len(m.viewList) > 0 {
 				m.inputMode = InputServerPassword
 				m.textInput.Placeholder = "Enter server password..."
 				m.textInput.EchoMode = textinput.EchoPassword
@@ -352,16 +352,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textInput.Focus()
 				return m, textinput.Blink
 			} else {
-				m.statusMsg = "Passwords can only be saved on favorited servers."
+				m.statusMsg = "Passwords can only be saved on Favourited servers."
 			}
 		case "r":
-			if m.activeTab == TabFavorites && len(m.viewList) > 0 {
+			if m.activeTab == TabFavourites && len(m.viewList) > 0 {
 				m.inputMode = InputRcon
 				m.textInput.Placeholder = "Enter RCON password..."
 				m.textInput.Focus()
 				return m, textinput.Blink
 			} else {
-				m.statusMsg = "RCON can only be set on favorited servers."
+				m.statusMsg = "RCON can only be set on Favourited servers."
 			}
 		case "n":
 			m.inputMode = InputNickname
@@ -376,15 +376,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					delete(m.favsData.Servers, target)
 					m.statusMsg = "Removed from Favourites."
 				} else {
-					m.favsData.Servers[target] = config.FavoriteServer{}
+					m.favsData.Servers[target] = config.Favouriteserver{}
 					m.statusMsg = "Added to Favourites."
 				}
-				config.SaveFavorites(m.favsData)
+				config.SaveFavourites(m.favsData)
 				m.applyFiltersAndSort()
 			}
 		case "i":
-			count := config.ImportSAMPFavorites(m.favsData)
-			config.SaveFavorites(m.favsData)
+			count := config.ImportSAMPFavourites(m.favsData)
+			config.SaveFavourites(m.favsData)
 			m.statusMsg = fmt.Sprintf("Imported %d servers from USERDATA.DAT", count)
 			m.applyFiltersAndSort()
 		case "s":
@@ -445,7 +445,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		if m.activeTab == TabFavorites {
+		if m.activeTab == TabFavourites {
 			m.applyFiltersAndSort()
 		}
 

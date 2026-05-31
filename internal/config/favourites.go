@@ -13,16 +13,16 @@ import (
 	"path/filepath"
 )
 
-type FavoriteServer struct {
+type Favouriteserver struct {
 	RconPassword   string `json:"rcon_password,omitempty"`
 	ServerPassword string `json:"server_password,omitempty"`
 }
 
-type FavoritesData struct {
-	Servers map[string]FavoriteServer `json:"servers"`
+type FavouritesData struct {
+	Servers map[string]Favouriteserver `json:"servers"`
 }
 
-func getFavoritesPath() (string, error) {
+func getFavouritesPath() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
@@ -30,29 +30,29 @@ func getFavoritesPath() (string, error) {
 	return filepath.Join(configDir, "omp-cli", "favourites.json"), nil
 }
 
-func LoadFavorites() (*FavoritesData, error) {
-	path, err := getFavoritesPath()
+func LoadFavourites() (*FavouritesData, error) {
+	path, err := getFavouritesPath()
 	if err != nil {
 		return nil, err
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return &FavoritesData{Servers: make(map[string]FavoriteServer)}, nil
+		return &FavouritesData{Servers: make(map[string]Favouriteserver)}, nil
 	}
 
-	var favs FavoritesData
+	var favs FavouritesData
 	if err := json.Unmarshal(data, &favs); err != nil {
 		return nil, err
 	}
 	if favs.Servers == nil {
-		favs.Servers = make(map[string]FavoriteServer)
+		favs.Servers = make(map[string]Favouriteserver)
 	}
 	return &favs, nil
 }
 
-func SaveFavorites(favs *FavoritesData) error {
-	path, err := getFavoritesPath()
+func SaveFavourites(favs *FavouritesData) error {
+	path, err := getFavouritesPath()
 	if err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func DecryptAES(encoded string) (string, error) {
 	return string(plaintext), nil
 }
 
-func ImportSAMPFavorites(favs *FavoritesData) int {
+func ImportSAMPFavourites(favs *FavouritesData) int {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return 0
@@ -224,7 +224,7 @@ func ImportSAMPFavorites(favs *FavoritesData) int {
 		if ip != "" {
 			target := fmt.Sprintf("%s:%d", ip, port)
 			if _, exists := favs.Servers[target]; !exists {
-				favs.Servers[target] = FavoriteServer{}
+				favs.Servers[target] = Favouriteserver{}
 				imported++
 			}
 		}
