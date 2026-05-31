@@ -57,14 +57,14 @@ jobs:
         if: matrix.os == 'windows'
         working-directory: omp-launchlib
         run: |
-          cargo build --package omp-launchlib --release
+          cargo build --package omp-core --release
           cargo build --package omp-injector --release --target i686-pc-windows-msvc
 
       - name: Compile Rust Core & Injector (Linux)
         if: matrix.os == 'linux'
         working-directory: omp-launchlib
         run: |
-          cargo build --package omp-launchlib --release
+          cargo build --package omp-core --release
           cargo build --package omp-injector --release --target i686-pc-windows-gnu
 
       - name: Compile Go CLI
@@ -73,6 +73,7 @@ jobs:
           CGO_ENABLED: 1
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.go_arch }}
+          CGO_LDFLAGS: "-L${{ github.workspace }}/omp-launchlib/target/release"
         shell: bash
         run: |
           if [ "${{ matrix.os }}" = "windows" ]; then
