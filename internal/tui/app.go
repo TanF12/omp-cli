@@ -20,6 +20,17 @@ import (
 type tickMsg time.Time
 type queryResultMsg struct{ results []core.ServerInfo }
 
+type clientsResultMsg struct {
+	target  string
+	clients []core.ServerClient
+	err     error
+}
+
+type cachedPlayers struct {
+	clients   []core.ServerClient
+	fetchedAt time.Time
+}
+
 type SortMode int
 
 const (
@@ -69,6 +80,11 @@ type model struct {
 	selectedVer string
 	isQuerying  bool
 
+	showPlayers     bool
+	currentClients  []core.ServerClient
+	fetchingClients bool
+	playersCache    map[string]cachedPlayers
+
 	launchCb func(string, uint16, string, string, string) error
 }
 
@@ -80,17 +96,18 @@ func InitialModel(cfg *config.AppConfig, servers []core.OpenMpServer, launcher f
 	favs, _ := config.LoadFavourites()
 
 	m := model{
-		cfg:         cfg,
-		apiServers:  servers,
-		favsData:    favs,
-		liveData:    make(map[string]core.ServerInfo),
-		pingHistory: make(map[string][]float64),
-		textInput:   ti,
-		sortMode:    SortPlayersDesc,
-		activeTab:   TabFavourites,
-		selectedVer: cfg.DefaultVersion,
-		isQuerying:  false,
-		launchCb:    launcher,
+		cfg:          cfg,
+		apiServers:   servers,
+		favsData:     favs,
+		liveData:     make(map[string]core.ServerInfo),
+		pingHistory:  make(map[string][]float64),
+		playersCache: make(map[string]cachedPlayers),
+		textInput:    ti,
+		sortMode:     SortPlayersDesc,
+		activeTab:    TabFavourites,
+		selectedVer:  cfg.DefaultVersion,
+		isQuerying:   false,
+		launchCb:     launcher,
 	}
 	m.applyFiltersAndSort()
 	return m
@@ -189,6 +206,13 @@ func queryVisibleServersCmd(targets []string) tea.Cmd {
 	}
 }
 
+func fetchClientsCmd(target, ip string, port uint16) tea.Cmd {
+	return func() tea.Msg {
+		clients, err := core.QueryClients(ip, port)
+		return clientsResultMsg{target: target, clients: clients, err: err}
+	}
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
@@ -282,6 +306,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "up", "k":
+			m.showPlayers = false
 			if m.cursor > 0 {
 				m.cursor--
 			}
@@ -289,6 +314,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scroll = m.cursor
 			}
 		case "down", "j":
+			m.showPlayers = false
 			if m.cursor < len(m.viewList)-1 {
 				m.cursor++
 			}
@@ -296,6 +322,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scroll = m.cursor - m.visibleRows + 1
 			}
 		case "tab", "right", "left":
+			m.showPlayers = false
 			if m.activeTab == TabGlobal {
 				m.activeTab = TabFavourites
 			} else {
@@ -303,6 +330,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.textInput.Reset()
 			m.applyFiltersAndSort()
+		case "c":
+			if len(m.viewList) > 0 {
+				m.showPlayers = !m.showPlayers
+				if m.showPlayers {
+					target := m.viewList[m.cursor].IP
+
+					if cache, ok := m.playersCache[target]; ok && time.Since(cache.fetchedAt) < 15*time.Second {
+						m.currentClients = cache.clients
+						m.fetchingClients = false
+						m.statusMsg = "Loaded players from cache."
+						return m, nil
+					}
+
+					m.fetchingClients = true
+					parts := strings.Split(target, ":")
+					port, _ := strconv.Atoi(parts[1])
+
+					m.statusMsg = "Fetching player list..."
+					return m, tea.Batch(textinput.Blink, fetchClientsCmd(target, parts[0], uint16(port)))
+				}
+			}
 		case "f":
 			m.inputMode = InputSearch
 			m.textInput.Placeholder = "Search..."
@@ -447,6 +495,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.activeTab == TabFavourites {
 			m.applyFiltersAndSort()
+		}
+
+	case clientsResultMsg:
+		m.fetchingClients = false
+		if msg.err != nil {
+			m.statusMsg = "Failed to fetch players: " + msg.err.Error()
+			m.showPlayers = false
+		} else {
+			m.currentClients = msg.clients
+			m.playersCache[msg.target] = cachedPlayers{
+				clients:   msg.clients,
+				fetchedAt: time.Now(),
+			}
+			m.statusMsg = fmt.Sprintf("Fetched %d players successfully.", len(msg.clients))
 		}
 
 	case tickMsg:
@@ -600,22 +662,74 @@ func (m model) View() string {
 			if hasLive {
 				pingStr = fmt.Sprintf("%dms", live.PingMs)
 			}
-			details += fmt.Sprintf("\nPing: %s\n\n", pingStr)
+			details += fmt.Sprintf("\nPing: %s\n", pingStr)
 
 			history := m.pingHistory[selected.IP]
-			if len(history) >= 2 {
-				graphHeight := m.height - 21
-				if graphHeight > 2 {
-					graph = asciigraph.Plot(history, asciigraph.Height(graphHeight), asciigraph.Width(rightWidth-10), asciigraph.Caption("Live Ping Fluctuation (ms)"))
+
+			if m.showPlayers {
+				if m.fetchingClients {
+					graph = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("\nFetching player list over UDP...")
+				} else {
+					colHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true).Underline(true)
+					rowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+
+					var tableRows []string
+					tableRows = append(tableRows, fmt.Sprintf("%-3s | %-24s | %-6s | %-4s",
+						colHeaderStyle.Render("ID"),
+						colHeaderStyle.Render("Player Name"),
+						colHeaderStyle.Render("Score"),
+						colHeaderStyle.Render("Ping")))
+
+					graphHeight := m.height - 21
+					if graphHeight < 1 {
+						graphHeight = 1
+					}
+
+					displayCount := len(m.currentClients)
+					if displayCount > graphHeight-2 {
+						displayCount = graphHeight - 2
+					}
+
+					for i := 0; i < displayCount; i++ {
+						c := m.currentClients[i]
+
+						nameRunes := []rune(c.Name)
+						nameStr := string(nameRunes)
+						if len(nameRunes) > 24 {
+							nameStr = string(nameRunes[:21]) + "..."
+						}
+
+						pingFmt := "-"
+						if c.Ping != nil {
+							pingFmt = fmt.Sprintf("%d", *c.Ping)
+						}
+
+						tableRows = append(tableRows, rowStyle.Render(fmt.Sprintf("%-3d | %-24s | %-6d | %-4s", c.ID, nameStr, c.Score, pingFmt)))
+					}
+
+					if len(m.currentClients) > displayCount {
+						tableRows = append(tableRows, lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(fmt.Sprintf("... and %d more", len(m.currentClients)-displayCount)))
+					} else if len(m.currentClients) == 0 {
+						tableRows = append(tableRows, lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("No players online."))
+					}
+
+					graph = "\n" + strings.Join(tableRows, "\n")
 				}
 			} else {
-				graph = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Awaiting data for graph...")
+				if len(history) >= 2 {
+					graphHeight := m.height - 21
+					if graphHeight > 2 {
+						graph = "\n" + asciigraph.Plot(history, asciigraph.Height(graphHeight), asciigraph.Width(rightWidth-10), asciigraph.Caption("Live Ping Fluctuation (ms)"))
+					}
+				} else {
+					graph = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("\n\nAwaiting data for graph...")
+				}
 			}
 		}
 	}
 
 	footer := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(
-		fmt.Sprintf(" Tab: Switch • S: Sort • F: Search • A: Add IP • B: Bookmark • D: Del • P: Pass • R: RCON • V: Ver (%s)", m.selectedVer),
+		fmt.Sprintf(" Tab: Switch • C: Players • S: Sort • F: Search • A: Add IP • B: Bookmark • D: Del • P: Pass • R: RCON • V: Ver (%s)", m.selectedVer),
 	)
 
 	panels := lipgloss.JoinHorizontal(lipgloss.Top,

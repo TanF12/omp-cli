@@ -9,12 +9,14 @@ extern char* omp_core_fetch_servers();
 extern char* omp_core_query_server(const char* ip, uint16_t port);
 extern char* omp_core_query_batch(const char* json_targets);
 extern char* omp_core_launch(const char* config_json);
+extern char* omp_core_query_clients(const char* ip, uint16_t port);
 extern void omp_core_free_string(char* s);
 */
 import "C"
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"unsafe"
 )
 
@@ -38,7 +40,7 @@ type ServerInfo struct {
 	MaxPlayers uint32 `json:"max_players"`
 	Gamemode   string `json:"gamemode"`
 	Language   string `json:"language"`
-	Password   bool   `json:"password"` // Password Protected Status
+	Password   bool   `json:"password"`
 	PingMs     uint32 `json:"ping_ms"`
 	Error      string `json:"error,omitempty"`
 }
@@ -53,6 +55,13 @@ type LaunchConfig struct {
 	OmpDllPath      *string `json:"omp_dll_path,omitempty"`
 	IsWine          bool    `json:"is_wine"`
 	InjectorExePath string  `json:"injector_exe_path"`
+}
+
+type ServerClient struct {
+	ID    uint8   `json:"id"`
+	Name  string  `json:"name"`
+	Score int32   `json:"score"`
+	Ping  *uint32 `json:"ping"`
 }
 
 func FetchServersAPI() ([]OpenMpServer, error) {
@@ -127,4 +136,29 @@ func LaunchGame(config LaunchConfig) error {
 		return errors.New(*result.Error)
 	}
 	return nil
+}
+
+func QueryClients(ip string, port uint16) ([]ServerClient, error) {
+	cIp := C.CString(ip)
+	defer C.free(unsafe.Pointer(cIp))
+
+	cResult := C.omp_core_query_clients(cIp, C.uint16_t(port))
+	defer C.omp_core_free_string(cResult)
+
+	resultStr := C.GoString(cResult)
+	if strings.Contains(resultStr, "\"error\"") {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal([]byte(resultStr), &errResp); err == nil {
+			return nil, errors.New(errResp.Error)
+		}
+		return nil, errors.New("failed to fetch clients")
+	}
+
+	var clients []ServerClient
+	if err := json.Unmarshal([]byte(resultStr), &clients); err != nil {
+		return nil, err
+	}
+	return clients, nil
 }
