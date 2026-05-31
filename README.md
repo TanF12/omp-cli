@@ -1,5 +1,8 @@
 # open.mp Terminal Launcher (`omp-cli`)
 
+<img width="1919" height="942" alt="image" src="https://github.com/user-attachments/assets/a52ba84b-cc91-4bc3-b665-4848c897dd21" />
+
+
 A cool, and visually stunning CLI server browser and launcher for SA-MP and open.mp. Powered by bubbletea.
 
 ## Features
