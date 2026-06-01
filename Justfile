@@ -37,14 +37,15 @@ install: download-core build
     @echo "=> Installing binaries..."
     cp omp-cli "{{BIN_DIR}}/omp-cli"
     
-    @echo "=> Configuring omp-cli..."
+    @echo "=> Generating omp-cli.ini configuration..."
     @if [ "$(uname)" = "Linux" ]; then \
-        LD_LIBRARY_PATH="{{BIN_DIR}}" "{{BIN_DIR}}/omp-cli" config set-injector "{{BIN_DIR}}/omp-injector.exe"; \
-        LD_LIBRARY_PATH="{{BIN_DIR}}" "{{BIN_DIR}}/omp-cli" config set-wine true; \
+        echo "[Settings]" > "{{BIN_DIR}}/omp-cli.ini"; \
+        echo "InjectorPath={{BIN_DIR}}/omp-injector.exe" >> "{{BIN_DIR}}/omp-cli.ini"; \
+        echo "IsWine=true" >> "{{BIN_DIR}}/omp-cli.ini"; \
         \
         echo "=> Creating terminal wrapper in {{LOCAL_BIN}}/omp-cli..."; \
         echo '#!/bin/sh' > "{{LOCAL_BIN}}/omp-cli"; \
-        echo 'export LD_LIBRARY_PATH="{{BIN_DIR}}:$LD_LIBRARY_PATH"' >> "{{LOCAL_BIN}}/omp-cli"; \
+        echo 'export LD_LIBRARY_PATH="{{BIN_DIR}}:\$LD_LIBRARY_PATH"' >> "{{LOCAL_BIN}}/omp-cli"; \
         echo 'exec "{{BIN_DIR}}/omp-cli" "$@"' >> "{{LOCAL_BIN}}/omp-cli"; \
         chmod +x "{{LOCAL_BIN}}/omp-cli"; \
         \
@@ -56,6 +57,8 @@ install: download-core build
         echo "=> Success! You can now launch 'open.mp Launcher' from your application menu."; \
         echo "=> You can also type 'omp-cli' anywhere in your terminal!"; \
     else \
-        "{{BIN_DIR}}/omp-cli" config set-injector "{{BIN_DIR}}/omp-injector.exe"; \
+        echo "[Settings]" > "{{BIN_DIR}}/omp-cli.ini"; \
+        echo "InjectorPath={{BIN_DIR}}/omp-injector.exe" >> "{{BIN_DIR}}/omp-cli.ini"; \
+        echo "IsWine=false" >> "{{BIN_DIR}}/omp-cli.ini"; \
         echo "=> Success! Execute {{BIN_DIR}}/omp-cli ui to play."; \
     fi

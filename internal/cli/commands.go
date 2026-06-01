@@ -19,7 +19,10 @@ import (
 )
 
 func Execute() error {
-	i18n.DetectLanguage()
+	cfg, err := config.Load()
+	if err == nil {
+		i18n.InitLang(cfg.Language)
+	}
 
 	if len(os.Args) < 2 {
 		return runInteractiveUI()
@@ -50,19 +53,24 @@ func runInteractiveUI() error {
 	}
 
 	if cfg.InjectorPath == "" || cfg.GamePath == "" {
-		return fmt.Errorf("Injector Path and Game Path must be configured for the UI.\nPlease run: omp-cli config setup")
+		return fmt.Errorf("%s\nInjector Path and Game Path must be configured.", i18n.T("cfg_req_inj"))
 	}
 
-	fmt.Println(i18n.T("fetching_list"))
-	servers, err := core.FetchServersAPI()
-	if err != nil {
-		return fmt.Errorf("failed to fetch server list: %v", err)
+	var servers []core.OpenMpServer
+	if cfg.MasterListURL != "" && strings.ToLower(cfg.MasterListURL) != "disabled" {
+		fmt.Println(i18n.T("fetching_list"))
+		fetched, err := core.FetchServersAPI(cfg.MasterListURL)
+		if err != nil {
+			fmt.Printf("Warning: Failed to fetch API (%v)\n", err)
+		} else {
+			servers = fetched
+		}
 	}
 
 	launcher := func(ip string, port uint16, name string, ver string, password string) error {
 		absGamePath, _ := filepath.Abs(cfg.GamePath)
 
-		sampDll, ompDll, err := version.EnsureClients(ver, absGamePath, true)
+		sampDll, ompDll, err := version.EnsureClients(cfg, ver, absGamePath, true)
 		if err != nil {
 			return fmt.Errorf("dependency error: %v", err)
 		}
@@ -121,7 +129,7 @@ func runQuery(args []string) error {
 
 func runConfig(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: omp-cli config [setup | view | set-injector <path> | set-game <path> | set-wine <true/false>]")
+		return fmt.Errorf("usage: omp-cli config [setup | view]")
 	}
 
 	cfg, err := config.Load()
@@ -168,38 +176,8 @@ func runConfig(args []string) error {
 
 	case "view":
 		fmt.Println(i18n.T("cfg_current"))
-		fmt.Printf("Injector Path: %s\nGame Path: %s\nDefault Name: %s\nUse Wine: %v\nDefault Version: %s\n",
-			cfg.InjectorPath, cfg.GamePath, cfg.DefaultName, cfg.IsWine, cfg.DefaultVersion)
-	case "set-injector":
-		if len(args) < 2 {
-			return fmt.Errorf("missing path")
-		}
-		path, _ := filepath.Abs(args[1])
-		cfg.InjectorPath = path
-		if err := config.Save(cfg); err != nil {
-			return err
-		}
-		fmt.Println(i18n.T("cfg_saved"))
-	case "set-game":
-		if len(args) < 2 {
-			return fmt.Errorf("missing path")
-		}
-		path, _ := filepath.Abs(args[1])
-		cfg.GamePath = path
-		if err := config.Save(cfg); err != nil {
-			return err
-		}
-		fmt.Println(i18n.T("cfg_saved"))
-	case "set-wine":
-		if len(args) < 2 {
-			return fmt.Errorf("missing value (true/false)")
-		}
-		val, _ := strconv.ParseBool(args[1])
-		cfg.IsWine = val
-		if err := config.Save(cfg); err != nil {
-			return err
-		}
-		fmt.Println(i18n.T("cfg_saved"))
+		fmt.Printf("Injector Path: %s\nGame Path: %s\nDefault Name: %s\nUse Wine: %v\nDefault Version: %s\nAPI URL: %s\nLanguage: %s\n",
+			cfg.InjectorPath, cfg.GamePath, cfg.DefaultName, cfg.IsWine, cfg.DefaultVersion, cfg.MasterListURL, cfg.Language)
 	default:
 		return fmt.Errorf("unknown config command: %s", args[0])
 	}
@@ -231,9 +209,9 @@ func runLaunch(args []string) error {
 	}
 
 	absGamePath, _ := filepath.Abs(*path)
-	fmt.Println(i18n.T("verifying_dlls"))
+	fmt.Println("Verifying DLLs...")
 
-	sampDll, ompDll, err := version.EnsureClients(*ver, absGamePath, false)
+	sampDll, ompDll, err := version.EnsureClients(cfg, *ver, absGamePath, false)
 	if err != nil {
 		return fmt.Errorf("failed dependency check: %v", err)
 	}

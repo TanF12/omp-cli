@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/guptarohit/asciigraph v0.9.0
 	github.com/schollz/progressbar/v3 v3.19.0
+	gopkg.in/ini.v1 v1.67.2
 )
 
 require (

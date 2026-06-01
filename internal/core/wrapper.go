@@ -5,7 +5,7 @@ package core
 #include <stdlib.h>
 #include <stdint.h>
 
-extern char* omp_core_fetch_servers();
+extern char* omp_core_fetch_servers(const char* url);
 extern char* omp_core_query_server(const char* ip, uint16_t port);
 extern char* omp_core_query_batch(const char* json_targets);
 extern char* omp_core_launch(const char* config_json);
@@ -22,27 +22,30 @@ import (
 
 // Raw data from the open.mp Web API
 type OpenMpServer struct {
-	IP  string `json:"ip"`
-	Hn  string `json:"hn"`  // Hostname
-	Pc  uint32 `json:"pc"`  // Players
-	Pm  uint32 `json:"pm"`  // Max Players
-	Gm  string `json:"gm"`  // Gamemode
-	La  string `json:"la"`  // Language
-	Pa  bool   `json:"pa"`  // Password Protected Status
-	Omp bool   `json:"omp"` // Is open.mp
+	IP  string            `json:"ip"`
+	Hn  string            `json:"hn"` // Hostname
+	Pc  uint32            `json:"pc"` // Players
+	Pm  uint32            `json:"pm"` // Max Players
+	Gm  string            `json:"gm"` // Gamemode
+	La  string            `json:"la"` // Language
+	Pa  bool              `json:"pa"` // Password Protected Status
+	Vn  string            `json:"vn"`
+	Omp bool              `json:"omp"` // Is open.mp
+	Ru  map[string]string `json:"ru"`
 }
 
 // Live UDP Query Data
 type ServerInfo struct {
-	Target     string `json:"target,omitempty"`
-	Hostname   string `json:"hostname"`
-	Players    uint32 `json:"players"`
-	MaxPlayers uint32 `json:"max_players"`
-	Gamemode   string `json:"gamemode"`
-	Language   string `json:"language"`
-	Password   bool   `json:"password"`
-	PingMs     uint32 `json:"ping_ms"`
-	Error      string `json:"error,omitempty"`
+	Target     string            `json:"target,omitempty"`
+	Hostname   string            `json:"hostname"`
+	Players    uint32            `json:"players"`
+	MaxPlayers uint32            `json:"max_players"`
+	Gamemode   string            `json:"gamemode"`
+	Language   string            `json:"language"`
+	Password   bool              `json:"password"`
+	PingMs     uint32            `json:"ping_ms"`
+	Rules      map[string]string `json:"rules,omitempty"`
+	Error      string            `json:"error,omitempty"`
 }
 
 type LaunchConfig struct {
@@ -64,12 +67,27 @@ type ServerClient struct {
 	Ping  *uint32 `json:"ping"`
 }
 
-func FetchServersAPI() ([]OpenMpServer, error) {
-	cResult := C.omp_core_fetch_servers()
+func FetchServersAPI(url string) ([]OpenMpServer, error) {
+	cUrl := C.CString(url)
+	defer C.free(unsafe.Pointer(cUrl))
+
+	cResult := C.omp_core_fetch_servers(cUrl)
 	defer C.omp_core_free_string(cResult)
 
+	resultStr := C.GoString(cResult)
+
+	if strings.HasPrefix(strings.TrimSpace(resultStr), "{") {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal([]byte(resultStr), &errResp); err == nil {
+			return nil, errors.New(errResp.Error)
+		}
+		return nil, errors.New("failed to fetch servers from API")
+	}
+
 	var servers []OpenMpServer
-	if err := json.Unmarshal([]byte(C.GoString(cResult)), &servers); err != nil {
+	if err := json.Unmarshal([]byte(resultStr), &servers); err != nil {
 		return nil, err
 	}
 	return servers, nil
@@ -91,8 +109,20 @@ func QueryBatch(targets []string) ([]ServerInfo, error) {
 	cResult := C.omp_core_query_batch(cReq)
 	defer C.omp_core_free_string(cResult)
 
+	resultStr := C.GoString(cResult)
+
+	if strings.HasPrefix(strings.TrimSpace(resultStr), "{") {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal([]byte(resultStr), &errResp); err == nil {
+			return nil, errors.New(errResp.Error)
+		}
+		return nil, errors.New("failed batch query operation")
+	}
+
 	var info []ServerInfo
-	err = json.Unmarshal([]byte(C.GoString(cResult)), &info)
+	err = json.Unmarshal([]byte(resultStr), &info)
 	return info, err
 }
 
@@ -146,7 +176,7 @@ func QueryClients(ip string, port uint16) ([]ServerClient, error) {
 	defer C.omp_core_free_string(cResult)
 
 	resultStr := C.GoString(cResult)
-	if strings.Contains(resultStr, "\"error\"") {
+	if strings.HasPrefix(strings.TrimSpace(resultStr), "{") {
 		var errResp struct {
 			Error string `json:"error"`
 		}

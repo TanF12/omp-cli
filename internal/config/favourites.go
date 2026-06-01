@@ -6,71 +6,70 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Favouriteserver struct {
-	RconPassword   string `json:"rcon_password,omitempty"`
-	ServerPassword string `json:"server_password,omitempty"`
+	RconPassword   string
+	ServerPassword string
 }
 
 type FavouritesData struct {
-	Servers map[string]Favouriteserver `json:"servers"`
-}
-
-func getFavouritesPath() (string, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(configDir, "omp-cli", "favourites.json"), nil
+	Servers map[string]Favouriteserver
 }
 
 func LoadFavourites() (*FavouritesData, error) {
-	path, err := getFavouritesPath()
-	if err != nil {
-		return nil, err
+	mu.Lock()
+	defer mu.Unlock()
+
+	file := loadIniFile()
+	favs := &FavouritesData{Servers: make(map[string]Favouriteserver)}
+
+	sec := file.Section("Favourites")
+	for _, key := range sec.Keys() {
+		k := key.Name()
+		v := key.String()
+
+		var s Favouriteserver
+		if v != "" {
+			parts := strings.SplitN(v, "|", 2)
+			s.ServerPassword = parts[0]
+			if len(parts) > 1 {
+				s.RconPassword = parts[1]
+			}
+		}
+		favs.Servers[k] = s
 	}
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return &FavouritesData{Servers: make(map[string]Favouriteserver)}, nil
-	}
-
-	var favs FavouritesData
-	if err := json.Unmarshal(data, &favs); err != nil {
-		return nil, err
-	}
-	if favs.Servers == nil {
-		favs.Servers = make(map[string]Favouriteserver)
-	}
-	return &favs, nil
+	return favs, nil
 }
 
 func SaveFavourites(favs *FavouritesData) error {
-	path, err := getFavouritesPath()
-	if err != nil {
-		return err
+	mu.Lock()
+	defer mu.Unlock()
+
+	file := loadIniFile()
+
+	file.DeleteSection("Favourites")
+	sec, _ := file.NewSection("Favourites")
+
+	for k, v := range favs.Servers {
+		val := v.ServerPassword
+		if v.RconPassword != "" {
+			val += "|" + v.RconPassword
+		}
+		sec.Key(k).SetValue(val)
 	}
 
-	data, err := json.MarshalIndent(favs, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(path, data, 0644)
+	return saveIniFile(file)
 }
 
 func getAesKey() ([]byte, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return nil, err
-	}
-	keyPath := filepath.Join(configDir, "omp-cli", "aes.key")
+	keyPath := filepath.Join(getExeDir(), "aes.key")
 
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		key := make([]byte, 32)
@@ -85,10 +84,7 @@ func getAesKey() ([]byte, error) {
 	return os.ReadFile(keyPath)
 }
 
-func EncryptAES(plaintext string) (string, error) {
-	if plaintext == "" {
-		return "", nil
-	}
+func encryptAESBase64(plaintext string) (string, error) {
 	key, err := getAesKey()
 	if err != nil {
 		return "", err
@@ -109,10 +105,7 @@ func EncryptAES(plaintext string) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-func DecryptAES(encoded string) (string, error) {
-	if encoded == "" {
-		return "", nil
-	}
+func decryptAESBase64(encoded string) (string, error) {
 	key, err := getAesKey()
 	if err != nil {
 		return "", err
@@ -139,6 +132,40 @@ func DecryptAES(encoded string) (string, error) {
 		return "", err
 	}
 	return string(plaintext), nil
+}
+
+func EncryptPassword(plaintext string, encrypt bool) string {
+	if plaintext == "" {
+		return ""
+	}
+	if encrypt {
+		enc, err := encryptAESBase64(plaintext)
+		if err == nil {
+			return "ENC:" + enc
+		}
+	}
+	return plaintext
+}
+
+func DecryptPassword(encoded string) string {
+	if encoded == "" {
+		return ""
+	}
+
+	toDecode := encoded
+	if strings.HasPrefix(encoded, "ENC:") {
+		toDecode = encoded[4:]
+	}
+
+	decrypted, err := decryptAESBase64(toDecode)
+	if err == nil {
+		return decrypted
+	}
+
+	if strings.HasPrefix(encoded, "ENC:") {
+		return ""
+	}
+	return encoded
 }
 
 func ImportSAMPFavourites(favs *FavouritesData) int {

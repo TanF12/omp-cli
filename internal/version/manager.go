@@ -12,41 +12,12 @@ import (
 
 	"github.com/bodgit/sevenzip"
 	"github.com/schollz/progressbar/v3"
+
+	"omp-cli/internal/config"
 )
 
-const (
-	AssetURL     = "https://assets.open.mp/samp_clients.7z"
-	OmpClientURL = "https://assets.open.mp/omp-client.dll"
-)
-
-type VersionInfo struct {
-	ID       string
-	Name     string
-	Checksum string
-}
-
-var AvailableVersions = []string{
-	"0.3.7-R1",
-	"0.3.7-R2",
-	"0.3.7-R3",
-	"0.3.7-R3-1",
-	"0.3.7-R4",
-	"0.3.7-R5",
-	"0.3.DL",
-}
-
-var SampVersions = map[string]VersionInfo{
-	"0.3.7-R1":   {ID: "0.3.7-R1", Name: "SA-MP 0.3.7 R1", Checksum: "7e30f3c9cd99d5e2932410f486e8139affa2dad19bd65ad9c328f6a4071943f7"},
-	"0.3.7-R2":   {ID: "0.3.7-R2", Name: "SA-MP 0.3.7 R2", Checksum: "de07a850590a43d83a40f9251741c07d3d0d74a217d5a09cb498a32982e8315b"},
-	"0.3.7-R3":   {ID: "0.3.7-R3", Name: "SA-MP 0.3.7 R3", Checksum: "81d39af30eafe6176de82c57ef9d2a9eaa92268b18d7b17096f67919a9248040"},
-	"0.3.7-R3-1": {ID: "0.3.7-R3-1", Name: "SA-MP 0.3.7 R3-1", Checksum: "9c9b2cc31a4ced6967420b1880c096b5c4e7630e227aa379be4019c21b6fddc1"},
-	"0.3.7-R4":   {ID: "0.3.7-R4", Name: "SA-MP 0.3.7 R4", Checksum: "15db80c5c9e02e011f16509d081d1ce7c8526238200814ebc16ba1f4f9ff12ab"},
-	"0.3.7-R5":   {ID: "0.3.7-R5", Name: "SA-MP 0.3.7 R5", Checksum: "b72b5dbe725f81864ca3f78bc7063bda56cc05fc7188af822fa7a754432553a2"},
-	"0.3.DL":     {ID: "0.3.DL", Name: "SA-MP 0.3.DL", Checksum: "bccdb297464bd382625635be25585df07a8fa6668bc0015650708e3eb4ffcd4b"},
-}
-
-func EnsureClients(versionID string, gamePath string, isQuiet bool) (sampDllPath string, ompDllPath string, err error) {
-	ver, ok := SampVersions[versionID]
+func EnsureClients(cfg *config.AppConfig, versionID string, gamePath string, isQuiet bool) (sampDllPath string, ompDllPath string, err error) {
+	expectedHash, ok := cfg.Checksums[versionID]
 	if !ok {
 		return "", "", fmt.Errorf("unsupported version %s", versionID)
 	}
@@ -58,26 +29,28 @@ func EnsureClients(versionID string, gamePath string, isQuiet bool) (sampDllPath
 	sampDllPath = filepath.Join(gamePath, "samp.dll")
 	ompDllPath = filepath.Join(gamePath, "omp-client.dll")
 
-	if !checkSHA256(sampDllPath, ver.Checksum) {
-		if !isQuiet {
-			fmt.Printf("[Dependency Manager] Extracting %s environment...\n", ver.Name)
+	skipChecksum := cfg.Security.DisableChecksumVerification
+
+	if skipChecksum || !checkSHA256(sampDllPath, expectedHash) {
+		if !isQuiet && !skipChecksum {
+			fmt.Printf("[Dependency Manager] Extracting SA-MP %s environment...\n", versionID)
 		}
 		archivePath := filepath.Join(cacheDir, "samp_clients.7z")
 
 		if _, err := os.Stat(archivePath); os.IsNotExist(err) {
 			if !isQuiet {
-				fmt.Printf("Downloading %s\n", AssetURL)
+				fmt.Printf("Downloading %s\n", cfg.Downloads.AssetsURL)
 			}
-			if err := downloadWithProgress(AssetURL, archivePath, isQuiet); err != nil {
+			if err := downloadWithProgress(cfg.Downloads.AssetsURL, archivePath, isQuiet); err != nil {
 				return "", "", fmt.Errorf("failed to download clients archive: %v", err)
 			}
 		}
 
-		if err := extractSampClientEnvironment(archivePath, ver.ID, gamePath); err != nil {
+		if err := extractSampClientEnvironment(archivePath, versionID, gamePath); err != nil {
 			return "", "", fmt.Errorf("failed to extract SA-MP environment: %v", err)
 		}
 
-		if !checkSHA256(sampDllPath, ver.Checksum) {
+		if !skipChecksum && !checkSHA256(sampDllPath, expectedHash) {
 			return "", "", fmt.Errorf("integrity check failed after extraction (hash mismatch)")
 		}
 	}
@@ -86,7 +59,7 @@ func EnsureClients(versionID string, gamePath string, isQuiet bool) (sampDllPath
 		if !isQuiet {
 			fmt.Println("[Dependency Manager] Downloading omp-client.dll...")
 		}
-		if err := downloadWithProgress(OmpClientURL, ompDllPath, isQuiet); err != nil {
+		if err := downloadWithProgress(cfg.Downloads.OmpClientURL, ompDllPath, isQuiet); err != nil {
 			if !isQuiet {
 				fmt.Printf("[Warning] Failed to fetch open.mp client. Vanilla SA-MP will be used.\n")
 			}
